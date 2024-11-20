@@ -7,29 +7,24 @@ def load_and_convert_image(image_path):
     image = cv2.imread(image_path)
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     return image, gray_image
-
 # Function to apply Sobel edge detection
 def sobel_edge_detection(gray_image):
     sobel_x = cv2.Sobel(gray_image, cv2.CV_64F, 1, 0, ksize=3)
     sobel_y = cv2.Sobel(gray_image, cv2.CV_64F, 0, 1, ksize=3)
     return cv2.magnitude(sobel_x, sobel_y)
-
 # Function to apply Canny edge detection
 def canny_edge_detection(gray_image, low_threshold=100, high_threshold=200):
     return cv2.Canny(gray_image, low_threshold, high_threshold)
-
 # Function to apply Laplacian of Gaussian (LoG) edge detection
 def log_edge_detection(gray_image):
     blurred_image = cv2.GaussianBlur(gray_image, (5, 5), 0)
     return cv2.Laplacian(blurred_image, cv2.CV_64F)
-
 # Function to find contours from an edge-detected image
 def find_contours(edge_image):
     # Convert the edge image to an 8-bit format if it's not already
     edge_image = cv2.convertScaleAbs(edge_image)  # Convert to 8-bit
     contours, _ = cv2.findContours(edge_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     return contours
-
 def auto_label_shape(contour):
     # Approximate the contour to a polygon (with more vertices, the better)
     perimeter = cv2.arcLength(contour, True)
@@ -52,7 +47,6 @@ def auto_label_shape(contour):
         return 'Polygon'  # or other categories based on vertices count
     else:
         return 'Unknown'
-
 # Inside your contour processing loop, replace the manual labeling with the auto_label_shape function:
 def calculate_shape_features(image, contours):
     features = []
@@ -69,34 +63,42 @@ def calculate_shape_features(image, contours):
         cv2.drawContours(mask, [contour], -1, 255, thickness=cv2.FILLED)
         pixel_count = cv2.countNonZero(mask)
         
-        # Extract features
-        features.append([area, perimeter, vertices, pixel_count])
+        # Create a dictionary for features
+        feature_dict = {
+            "area": area,
+            "perimeter": perimeter,
+            "vertices": vertices,
+            "pixel_count": pixel_count
+        }
         
+        features.append(feature_dict)
+        print(feature_dict)
         # Auto label the shape
         labels.append(auto_label_shape(contour))  # Use the automated labeling function
 
     return features, labels
-
 # Function to draw contours and display calculated features
 def draw_and_display_features(image, contours, features):
     image_with_contours = image.copy()
     
-    for contour, feature in zip(contours, features):
-        # Extract feature values
-        area, perimeter, vertices, pixel_count = feature
-        
-        # Display feature values on the image
-        cv2.putText(image_with_contours, f"Area: {area:.2f}", (contour[0][0][0], contour[0][0][1]),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-        cv2.putText(image_with_contours, f"Perim: {perimeter:.2f}", (contour[0][0][0], contour[0][0][1] + 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-        cv2.putText(image_with_contours, f"Verts: {vertices}", (contour[0][0][0], contour[0][0][1] + 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-        cv2.putText(image_with_contours, f"Pixels: {pixel_count}", (contour[0][0][0], contour[0][0][1] + 60),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-        
-        # Draw the contours
-        cv2.drawContours(image_with_contours, [contour], -1, (0, 255, 0), 2)
+    # Aggregate statistics
+    total_area = sum(feature["area"] for feature in features)
+    total_perimeter = sum(feature["perimeter"] for feature in features)
+    total_vertices = sum(feature["vertices"] for feature in features)
+    total_pixel_count = sum(feature["pixel_count"] for feature in features)
+    
+    # Display summary statistics on the image
+    cv2.putText(image_with_contours, f"Total Area: {total_area:.2f}", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+    cv2.putText(image_with_contours, f"Total Perim: {total_perimeter:.2f}", (10, 60),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+    cv2.putText(image_with_contours, f"Total Verts: {total_vertices}", (10, 90),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+    cv2.putText(image_with_contours, f"Total Pixels: {total_pixel_count}", (10, 120),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+    
+    # Optionally, draw the contours without repeating text for each
+    cv2.drawContours(image_with_contours, contours, -1, (0, 255, 0), 2)
     
     return image_with_contours
 
@@ -124,10 +126,10 @@ def main():
         log_contours = find_contours(log_edges)
         
         # Calculate features (area, perimeter, vertices count, pixel count) for each set of contours
-        sobel_features = calculate_shape_features(image, sobel_contours)
-        canny_features = calculate_shape_features(image, canny_contours)
-        log_features = calculate_shape_features(image, log_contours)
-        
+        sobel_features, _ = calculate_shape_features(image, sobel_contours)
+        canny_features, _ = calculate_shape_features(image, canny_contours)
+        log_features, _ = calculate_shape_features(image, log_contours)
+
         # Draw contours and display features
         sobel_image = draw_and_display_features(image, sobel_contours, sobel_features)
         canny_image = draw_and_display_features(image, canny_contours, canny_features)
