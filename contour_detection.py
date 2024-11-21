@@ -26,27 +26,47 @@ def find_contours(edge_image):
     contours, _ = cv2.findContours(edge_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     return contours
 def auto_label_shape(contour):
-    # Approximate the contour to a polygon (with more vertices, the better)
+    # Approximate the contour to a polygon
     perimeter = cv2.arcLength(contour, True)
     approx = cv2.approxPolyDP(contour, 0.04 * perimeter, True)  # 4% tolerance
-    
-    # Based on the number of vertices, label the shape
     vertices_count = len(approx)
-    
+
+    # Calculate the contour area and perimeter
+    area = cv2.contourArea(contour)
+
+    # Special cases for very small contours
+    if area < 10 and vertices_count < 4:
+        return 'Unknown'  # Too small to determine
+
+    # Circle detection: if the contour is round and has a high number of vertices
+    if vertices_count > 5:
+        # Use aspect ratio or perimeter/area ratio to determine if it's a circle
+        circularity = 4 * np.pi * area / (perimeter ** 2)
+        if circularity > 0.8:  # Circularity threshold (ideal circle is close to 1)
+            return 'Circle'
+
+    # Triangle detection
     if vertices_count == 3:
         return 'Triangle'
-    elif vertices_count == 4:
-        # Check if the width and height are roughly equal (for square/rectangle)
+
+    # Square/Rectangle detection (4 vertices)
+    if vertices_count == 4:
+        # Check if the shape is approximately square
         rect = cv2.boundingRect(approx)
         width, height = rect[2], rect[3]
-        if abs(width - height) < 0.1 * width:  # Threshold for "square" (aspect ratio check)
+        aspect_ratio = width / height
+        if 0.9 <= aspect_ratio <= 1.1:  # Threshold for square
             return 'Square'
         else:
             return 'Rectangle'
-    elif vertices_count > 4:
-        return 'Polygon'  # or other categories based on vertices count
-    else:
-        return 'Unknown'
+
+    # Handle other polygons
+    if vertices_count > 4:
+        return 'Polygon'
+
+    # Default case for unidentified shapes
+    return 'Unknown'
+
 # Inside your contour processing loop, replace the manual labeling with the auto_label_shape function:
 def calculate_shape_features(image, contours):
     features = []
@@ -97,15 +117,43 @@ def draw_and_display_features(image, contours, features):
     cv2.putText(image_with_contours, f"Total Pixels: {total_pixel_count}", (10, 120),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
     
-    # Optionally, draw the contours without repeating text for each
-    cv2.drawContours(image_with_contours, contours, -1, (0, 255, 0), 2)
-    
-    return image_with_contours
+    # Draw the contours and add labels
+    for i, contour in enumerate(contours):
+        # Get the label for the shape based on contours
+        label = auto_label_shape(contour)
+        
+        # Get the centroid of the contour to position the label
+        M = cv2.moments(contour)
+        if M["m00"] != 0:  # Ensure the contour is not empty
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+        else:
+            cX, cY = 0, 0
 
+        # Draw the contour
+        cv2.drawContours(image_with_contours, [contour], -1, (0, 255, 0), 2)
+        
+        # Add the label near the centroid of the contour
+        cv2.putText(image_with_contours, label, (cX, cY),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+
+    return image_with_contours
+# Function to save the image with the new label
+def save_image_with_label(image, original_image_path):
+    # Extract the original image name without the extension
+    image_name = os.path.splitext(os.path.basename(original_image_path))[0]
+    
+    # Create the "kNN guessed" image filename
+    output_filename = f"{image_name}_kNN_guessed.jpg"
+    output_path = os.path.join('final_images', output_filename)
+    
+    # Save the image
+    cv2.imwrite(output_path, image)
+    print(f"Saved: {output_path}")
 # Main function to process images and save to "final_images" folder
 def main():
     # List of images for processing
-    image_paths = ['images/simple_circle.jpeg', 'images/simple_square.webp', 'images/simple_triangle.jpg', 'images/simple_yin_and_yang.png']
+    image_paths = ['images/simple_circle.jpeg', 'images/simple_square.webp', 'images/simple_triangle.jpg', 'images/simple_yin_and_yang.jpg']
     
     # Create folder "final_images" if it doesn't exist
     output_folder = 'final_images'
